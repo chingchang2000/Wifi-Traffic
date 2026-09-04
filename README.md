@@ -44,25 +44,218 @@ It can still identify many domains from DNS lookups, TLS SNI when it is visible,
 
 Encrypted DNS, TLS ECH, VPNs and some proxy technologies can reduce domain visibility. In those cases the app can still record visible connection metadata such as IP addresses, ports, protocol and byte counts.
 
-## Install on Windows
+# Installation guide
+
+The easiest way to install WiFi Traffic is to use the pre-built Windows version from GitHub Actions.
+
+## Method 1 — Download the ready-made Windows build
+
+### Step 1: Install Npcap
+
+WiFi Traffic needs Npcap to capture network traffic on Windows.
+
+1. Go to the official Npcap website: https://npcap.com/#download
+2. Download the latest Npcap installer.
+3. Run the installer as Administrator.
+4. Keep the normal/default installation options unless you know you need something different.
+5. Finish the installation.
+
+If WiFi Traffic was already open, close it and start it again after installing Npcap.
+
+### Step 2: Download WiFi Traffic
+
+1. Open this repository on GitHub.
+2. Click the **Actions** tab near the top of the repository.
+3. Click **Windows Build** in the left side.
+4. Open the newest successful build with a green check mark.
+5. Scroll down to **Artifacts**.
+6. Download **WifiTraffic-win-x64**.
+7. Extract the downloaded ZIP file somewhere on your PC.
+
+For example:
+
+`C:\Program Files\WifiTraffic\`
+
+or:
+
+`C:\Users\YOUR-NAME\Desktop\WifiTraffic\`
+
+### Step 3: Start the program
+
+1. Open the extracted folder.
+2. Find `WifiTraffic.exe`.
+3. Double-click it.
+4. Windows will ask for Administrator permission because packet capture requires elevated access.
+5. Click **Yes**.
+
+If Windows SmartScreen appears because the build is not code-signed yet, choose **More info** and then **Run anyway** only if you downloaded the build directly from this repository.
+
+### Step 4: Select your network adapter
+
+At the top of WiFi Traffic there is an adapter selector.
+
+Choose the adapter that is actually connected to the network:
+
+- If your PC uses Wi-Fi, select your Wi-Fi adapter.
+- If your PC uses a network cable, select the Ethernet adapter.
+- Ignore disconnected adapters, VPN adapters and virtual adapters unless you specifically want to inspect them.
+
+Then click:
+
+**Start capture**
+
+The status indicator should turn green and new network traffic should begin appearing in the **Live traffic** tab.
+
+### Step 5: Test that it works
+
+While capture is running:
+
+1. Open your browser.
+2. Visit a few websites.
+3. Return to WiFi Traffic.
+4. Look under **Live traffic** and **Top websites**.
+
+You should begin seeing IP addresses, protocols, ports, traffic sizes and many detected domains.
+
+Examples of domains that may appear:
+
+- `youtube.com`
+- `google.com`
+- `discord.com`
+- `tiktok.com`
+
+Some encrypted traffic may only show IP/port information. This is normal.
+
+---
+
+## Method 2 — Build and install from source
+
+Use this method if you want to modify the program or build it yourself.
 
 ### Requirements
 
-- Windows 10 or Windows 11, 64-bit
+You need:
+
+- Windows 10 or Windows 11 64-bit
 - Administrator permission
 - Npcap
-- .NET 8 SDK only when building from source
+- .NET 8 SDK
+- Git, if you want to clone the repository
 
-### Easy source install
+### Step 1: Install Npcap
 
-1. Download or clone this repository.
-2. Install Npcap from the official Npcap website.
-3. Double-click `windows-install.bat`.
-4. Accept the Administrator prompt.
-5. The script builds a self-contained `WifiTraffic.exe` and creates a desktop shortcut.
-6. Select your active Wi-Fi or Ethernet adapter and click **Start capture**.
+Download and install Npcap from:
 
-The generated application is placed in `dist\win-x64\WifiTraffic.exe`.
+https://npcap.com/#download
+
+### Step 2: Install the .NET 8 SDK
+
+Download the .NET 8 SDK from:
+
+https://dotnet.microsoft.com/download/dotnet/8.0
+
+Make sure you install the **SDK**, not only the runtime.
+
+### Step 3: Download the repository
+
+Either use Git:
+
+```powershell
+git clone https://github.com/chingchang2000/Wifi-Traffic.git
+cd Wifi-Traffic
+```
+
+Or click:
+
+**Code → Download ZIP**
+
+and extract the ZIP file.
+
+### Step 4: Run the automatic Windows installer
+
+Double-click:
+
+`windows-install.bat`
+
+The installer will:
+
+1. Request Administrator permission.
+2. Check whether Npcap is installed.
+3. Check whether the .NET 8 SDK is installed.
+4. Restore the required NuGet packages.
+5. Build WiFi Traffic.
+6. Publish a self-contained Windows x64 version.
+7. Create a desktop shortcut.
+8. Start WiFi Traffic automatically.
+
+The compiled application is placed here:
+
+`dist\win-x64\WifiTraffic.exe`
+
+After the first installation you can use:
+
+`start.bat`
+
+or the desktop shortcut to start WiFi Traffic again.
+
+---
+
+## Manual build
+
+If you do not want to use the installer script, open PowerShell inside the repository and run:
+
+```powershell
+dotnet restore WifiTraffic.sln
+dotnet build WifiTraffic.sln -c Release
+dotnet publish src/WifiTraffic.App/WifiTraffic.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o dist/win-x64
+```
+
+Then run:
+
+`dist\win-x64\WifiTraffic.exe`
+
+## Troubleshooting
+
+### No adapters appear
+
+Install or reinstall Npcap, then restart WiFi Traffic.
+
+### Capture cannot start
+
+Make sure:
+
+- Npcap is installed.
+- WiFi Traffic is running as Administrator.
+- You selected a real Wi-Fi or Ethernet adapter.
+
+### I do not see traffic from every device on my Wi-Fi
+
+This is expected when the Windows PC is only a normal Wi-Fi client.
+
+Modern Wi-Fi routers do not normally send every device's private traffic to every other connected device.
+
+To monitor the entire network, the monitoring machine must be placed in the traffic path, for example by being used as a gateway/hotspot or by receiving mirrored traffic from compatible network equipment.
+
+### Domains are sometimes missing
+
+This can happen with:
+
+- DNS-over-HTTPS
+- DNS-over-TLS
+- TLS ECH
+- VPN connections
+- proxies
+- applications that connect directly to IP addresses
+
+WiFi Traffic does not decrypt HTTPS traffic.
+
+### Where is the traffic history stored?
+
+The local database is stored at:
+
+`%LOCALAPPDATA%\WifiTraffic\wifi-traffic.db`
+
+You can delete the history from inside the application with **Clear history**.
 
 ## GitHub build
 
