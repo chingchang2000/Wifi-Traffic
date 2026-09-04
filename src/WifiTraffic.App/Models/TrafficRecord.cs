@@ -17,9 +17,24 @@ public sealed class TrafficRecord
     public string Endpoint => DestinationPort > 0 ? $"{DestinationIp}:{DestinationPort}" : DestinationIp;
 }
 
-public sealed record CaptureAdapter(string Id, string Name, string Description)
+public sealed record CaptureAdapter(
+    string Id,
+    string Name,
+    string Description,
+    bool IsGatewayCandidate = false)
 {
-    public string DisplayName => string.IsNullOrWhiteSpace(Description) ? Name : $"{Description} — {Name}";
+    public string DisplayName
+    {
+        get
+        {
+            var label = string.IsNullOrWhiteSpace(Description) ? Name : Description;
+            return IsGatewayCandidate ? $"★ WHOLE NETWORK — {label}" : label;
+        }
+    }
 }
 
-public sealed record OverviewStats(long PacketCount, long TotalBytes, long UniqueDomains, long UniqueSources);
+public sealed record OverviewStats(
+    long PacketCount,
+    long TotalBytes,
+    long UniqueDomains,
+    long UniqueSources);
