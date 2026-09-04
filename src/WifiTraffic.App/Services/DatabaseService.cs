@@ -1,3 +1,4 @@
+using System.Threading.Channels;
 using Microsoft.Data.Sqlite;
 using WifiTraffic.Models;
 
@@ -6,7 +7,14 @@ namespace WifiTraffic.Services;
 public sealed class DatabaseService
 {
     private readonly string _connectionString;
-    private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly SemaphoreSlim _writeGate = new(1, 1);
+    private readonly Channel<TrafficRecord> _queue = Channel.CreateUnbounded<TrafficRecord>(
+        new UnboundedChannelOptions
+        {
+            SingleReader = true,
+            SingleWriter = false,
+            AllowSynchronousContinuations = false
+        });
 
     public string DatabasePath { get; }
 
@@ -19,11 +27,13 @@ public sealed class DatabaseService
         Directory.CreateDirectory(dataDir);
         DatabasePath = Path.Combine(dataDir, "wifi-traffic.db");
         _connectionString = $"Data Source={DatabasePath};Cache=Shared";
+
+        _ = Task.Run(WriterLoopAsync);
     }
 
     public async Task InitializeAsync()
     {
-        await _gate.WaitAsync();
+        await _writeGate.WaitAsync();
         try
         {
             await using var connection = new SqliteConnection(_connectionString);
@@ -32,6 +42,7 @@ public sealed class DatabaseService
             var command = connection.CreateCommand();
             command.CommandText = """
                 PRAGMA journal_mode=WAL;
+                PRAGMA synchronous=NORMAL;
                 CREATE TABLE IF NOT EXISTS traffic (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     timestamp TEXT NOT NULL,
@@ -53,19 +64,48 @@ public sealed class DatabaseService
         }
         finally
         {
-            _gate.Release();
+            _writeGate.Release();
         }
     }
 
-    public async Task InsertAsync(TrafficRecord record)
+    public bool Enqueue(TrafficRecord record) => _queue.Writer.TryWrite(record);
+
+    private async Task WriterLoopAsync()
     {
-        await _gate.WaitAsync();
+        var batch = new List<TrafficRecord>(200);
+
+        while (await _queue.Reader.WaitToReadAsync())
+        {
+            batch.Clear();
+
+            while (batch.Count < 200 && _queue.Reader.TryRead(out var record))
+                batch.Add(record);
+
+            if (batch.Count == 0)
+                continue;
+
+            try
+            {
+                await InsertBatchAsync(batch);
+            }
+            catch
+            {
+                // Capture must remain responsive even if disk/database access temporarily fails.
+            }
+        }
+    }
+
+    private async Task InsertBatchAsync(IReadOnlyList<TrafficRecord> records)
+    {
+        await _writeGate.WaitAsync();
         try
         {
             await using var connection = new SqliteConnection(_connectionString);
             await connection.OpenAsync();
+            await using var transaction = await connection.BeginTransactionAsync();
 
             var command = connection.CreateCommand();
+            command.Transaction = transaction;
             command.CommandText = """
                 INSERT INTO traffic
                 (timestamp, adapter, source_ip, destination_ip, source_port, destination_port, protocol, direction, domain, bytes)
@@ -73,22 +113,38 @@ public sealed class DatabaseService
                 ($timestamp, $adapter, $source, $destination, $sourcePort, $destinationPort, $protocol, $direction, $domain, $bytes);
                 """;
 
-            command.Parameters.AddWithValue("$timestamp", record.Timestamp.ToUniversalTime().ToString("O"));
-            command.Parameters.AddWithValue("$adapter", record.Adapter);
-            command.Parameters.AddWithValue("$source", record.SourceIp);
-            command.Parameters.AddWithValue("$destination", record.DestinationIp);
-            command.Parameters.AddWithValue("$sourcePort", record.SourcePort);
-            command.Parameters.AddWithValue("$destinationPort", record.DestinationPort);
-            command.Parameters.AddWithValue("$protocol", record.Protocol);
-            command.Parameters.AddWithValue("$direction", record.Direction);
-            command.Parameters.AddWithValue("$domain", record.Domain);
-            command.Parameters.AddWithValue("$bytes", record.Bytes);
+            var timestamp = command.Parameters.Add("$timestamp", SqliteType.Text);
+            var adapter = command.Parameters.Add("$adapter", SqliteType.Text);
+            var source = command.Parameters.Add("$source", SqliteType.Text);
+            var destination = command.Parameters.Add("$destination", SqliteType.Text);
+            var sourcePort = command.Parameters.Add("$sourcePort", SqliteType.Integer);
+            var destinationPort = command.Parameters.Add("$destinationPort", SqliteType.Integer);
+            var protocol = command.Parameters.Add("$protocol", SqliteType.Text);
+            var direction = command.Parameters.Add("$direction", SqliteType.Text);
+            var domain = command.Parameters.Add("$domain", SqliteType.Text);
+            var bytes = command.Parameters.Add("$bytes", SqliteType.Integer);
 
-            await command.ExecuteNonQueryAsync();
+            foreach (var record in records)
+            {
+                timestamp.Value = record.Timestamp.ToUniversalTime().ToString("O");
+                adapter.Value = record.Adapter;
+                source.Value = record.SourceIp;
+                destination.Value = record.DestinationIp;
+                sourcePort.Value = record.SourcePort;
+                destinationPort.Value = record.DestinationPort;
+                protocol.Value = record.Protocol;
+                direction.Value = record.Direction;
+                domain.Value = record.Domain;
+                bytes.Value = record.Bytes;
+
+                await command.ExecuteNonQueryAsync();
+            }
+
+            await transaction.CommitAsync();
         }
         finally
         {
-            _gate.Release();
+            _writeGate.Release();
         }
     }
 
@@ -184,9 +240,13 @@ public sealed class DatabaseService
 
     public async Task ClearAsync()
     {
-        await _gate.WaitAsync();
+        await _writeGate.WaitAsync();
         try
         {
+            while (_queue.Reader.TryRead(out _))
+            {
+            }
+
             await using var connection = new SqliteConnection(_connectionString);
             await connection.OpenAsync();
 
@@ -200,7 +260,7 @@ public sealed class DatabaseService
         }
         finally
         {
-            _gate.Release();
+            _writeGate.Release();
         }
     }
 }
