@@ -2,237 +2,137 @@
 
 A native Windows network-visibility application for monitoring traffic on networks you own or are authorized to administer.
 
-WiFi Traffic is a .NET 8 WPF desktop program that produces a real Windows EXE, stores history in SQLite, captures packets through Npcap/SharpPcap, identifies many website domains, and has an automatic Windows build workflow.
+WiFi Traffic is a .NET 8 WPF desktop program that produces a real Windows EXE, stores history in SQLite, captures local packet metadata through Npcap/SharpPcap, and can monitor DNS domains from devices across a normal home network through Router DNS Mode.
 
 ## Current features
 
 - Native Windows desktop UI
-- Real-time packet feed
-- Adapter selector and start/stop capture
-- Packet, byte, domain and source counters
+- This-PC packet capture
+- Whole Network / Router DNS Mode
+- Devices stay connected to the normal router Wi-Fi
+- Built-in UDP and TCP DNS proxy/sensor
+- Per-device source IP for DNS queries
+- Automatic Windows Firewall rules for local-subnet DNS
+- Detects the PC LAN IP and default gateway
+- Button to copy the DNS server address
+- Button to open the router administration page
+- Real-time traffic/domain feed
 - Local SQLite history
 - Top website/domain view
-- IPv4 and IPv6 capture
-- TCP and UDP metadata
 - DNS question extraction
-- HTTP Host extraction
-- TLS ClientHello SNI extraction
-- Persistent data under LocalAppData
-- Self-contained win-x64 publishing
+- HTTP Host extraction in This-PC capture
+- TLS ClientHello SNI extraction in This-PC capture
 - GitHub Actions Windows build
-- One-click Windows setup script
-- Desktop shortcut creation
-- No packet payloads stored
+- Self-contained Windows x64 EXE
 - No HTTPS decryption
 - No password/session interception
 
-## Important: what "all Wi-Fi traffic" means on Windows
+## Whole Network / Router DNS Mode
 
-A normal Windows PC connected as an ordinary Wi-Fi client does not automatically receive every other device's private unicast packets. Promiscuous capture does not bypass how a modern access point or switch forwards traffic.
+This is the recommended mode if you want to see domains requested by other devices **without connecting those devices to the computer**.
 
-WiFi Traffic can record everything that reaches the selected capture adapter. To obtain whole-network visibility, the Windows machine needs to be in the traffic path, for example:
+Phones, TVs, consoles, tablets and other PCs remain connected to the same normal router Wi-Fi they already use.
 
-1. Use the monitoring PC as the network gateway/hotspot for the devices being monitored.
-2. Feed mirrored traffic to the monitoring machine from networking hardware that supports port mirroring.
-3. Use a dedicated gateway/router sensor and send metadata to this dashboard.
+### How it works
 
-## Whole Network / Gateway Mode
+WiFi Traffic runs a DNS server/proxy on the Windows PC.
 
-If WiFi Traffic only shows websites opened by the monitoring PC, that is expected in **This PC only** mode.
+Your router is configured once to hand out the Windows PC's LAN IP as the network DNS server. DNS requests then look like:
 
-A normal Windows PC connected to a router does not receive all private unicast traffic from every other Wi-Fi device. To see other devices without changing the router, use the new **Whole Network / Gateway** mode:
+`Phone 192.168.1.24 → youtube.com`
 
-1. Open WiFi Traffic.
-2. Change the mode at the top from **This PC only** to **Whole Network / Gateway**.
-3. Click **Open Mobile Hotspot**.
-4. Turn on Windows Mobile Hotspot.
-5. Connect the phones, consoles, TVs, tablets or other PCs you want to monitor to the Windows hotspot instead of directly to the router Wi-Fi.
-6. Return to WiFi Traffic.
-7. Click **Refresh adapters**.
-8. Select the adapter marked **★ WHOLE NETWORK**.
-9. Click **Start capture**.
+`TV 192.168.1.31 → netflix.com`
 
-Traffic from hotspot clients will be labeled with directions such as:
+`PlayStation 192.168.1.42 → playstation.net`
 
-- `Client → Internet`
-- `Internet → Client`
-- `Client / Local`
+WiFi Traffic logs the device IP and requested domain, forwards the DNS request to an upstream resolver, and returns the answer to the device.
 
-The **Source / device IP** column lets you distinguish hotspot clients by their private IP address.
+### Setup
 
-### Important limitation
+1. Open WiFi Traffic as Administrator.
+2. Select **Whole Network / Router DNS** at the top.
+3. The program displays **This PC DNS address**.
+4. Click **Copy DNS IP**.
+5. Click **Open router**.
+6. Log in to your router.
+7. Find the router's **LAN**, **DHCP**, or **DNS** settings.
+8. Set the LAN/DHCP **Primary DNS server** to the PC IP shown by WiFi Traffic.
+9. Save the router setting.
+10. Return to WiFi Traffic.
+11. Click **Start DNS sensor**.
 
-Whole Network mode can only see devices whose traffic actually passes through the monitoring PC.
+The other devices do **not** connect to the PC. They remain on the normal router Wi-Fi.
 
-Devices that remain connected directly to the original router Wi-Fi will normally remain invisible to the Windows capture machine. To monitor those without reconnecting them to the PC hotspot, the router/switch itself must support traffic mirroring, gateway logging, or another authorized network-monitoring method.
+For the most reliable setup, reserve the PC's LAN IP in the router so the address does not change.
 
-## Website visibility
+## Important limitations
 
-Most modern websites use HTTPS. WiFi Traffic does not break or decrypt HTTPS.
+A normal Windows Wi-Fi client cannot magically receive all private unicast packets from every other client on the router.
 
-It can still identify many domains from DNS lookups, TLS SNI when it is visible, and HTTP Host headers for unencrypted HTTP.
+Router DNS Mode therefore provides **network-wide domain visibility**, not complete packet interception.
 
-Encrypted DNS, TLS ECH, VPNs and some proxy technologies can reduce domain visibility. In those cases the app can still record visible connection metadata such as IP addresses, ports, protocol and byte counts.
+It can show many requested domains, but not full encrypted HTTPS URLs, page paths, messages, passwords, or page contents.
+
+Visibility can also be reduced by:
+
+- DNS-over-HTTPS
+- DNS-over-TLS
+- Apple Private Relay
+- VPNs
+- applications with hard-coded external DNS
+- encrypted DNS inside browsers/apps
+- cached DNS results
+
+For full packet metadata from every device while they remain directly connected to the router, the router/network hardware itself must support features such as traffic mirroring, gateway capture, flow export, or compatible logging.
+
+## This PC mode
+
+This mode uses Npcap and captures packet metadata that reaches the selected Windows network adapter.
+
+It can identify many domains from:
+
+- ordinary DNS
+- HTTP Host headers
+- visible TLS SNI
+
+Because modern switches and Wi-Fi access points isolate client unicast traffic, This PC mode normally sees mostly the Windows PC's own traffic.
 
 # Installation guide
 
-The easiest way to install WiFi Traffic is to use the pre-built Windows version from GitHub Actions.
+## Ready-made Windows build
 
-## Method 1 — Download the ready-made Windows build
+1. Install Npcap from the official Npcap website if you want to use **This PC mode**.
+2. Open this repository on GitHub.
+3. Click **Actions**.
+4. Open the newest successful **Windows Build**.
+5. Download the **WifiTraffic-win-x64** artifact.
+6. Extract the ZIP.
+7. Run `WifiTraffic.exe`.
+8. Accept the Administrator prompt.
 
-### Step 1: Install Npcap
+Router DNS Mode itself does not require Npcap for DNS monitoring, but the application includes both modes.
 
-WiFi Traffic needs Npcap to capture network traffic on Windows.
+## Build from source
 
-1. Go to the official Npcap website: https://npcap.com/#download
-2. Download the latest Npcap installer.
-3. Run the installer as Administrator.
-4. Keep the normal/default installation options unless you know you need something different.
-5. Finish the installation.
-
-If WiFi Traffic was already open, close it and start it again after installing Npcap.
-
-### Step 2: Download WiFi Traffic
-
-1. Open this repository on GitHub.
-2. Click the **Actions** tab near the top of the repository.
-3. Click **Windows Build** in the left side.
-4. Open the newest successful build with a green check mark.
-5. Scroll down to **Artifacts**.
-6. Download **WifiTraffic-win-x64**.
-7. Extract the downloaded ZIP file somewhere on your PC.
-
-For example:
-
-`C:\Program Files\WifiTraffic\`
-
-or:
-
-`C:\Users\YOUR-NAME\Desktop\WifiTraffic\`
-
-### Step 3: Start the program
-
-1. Open the extracted folder.
-2. Find `WifiTraffic.exe`.
-3. Double-click it.
-4. Windows will ask for Administrator permission because packet capture requires elevated access.
-5. Click **Yes**.
-
-If Windows SmartScreen appears because the build is not code-signed yet, choose **More info** and then **Run anyway** only if you downloaded the build directly from this repository.
-
-### Step 4: Select your network adapter
-
-At the top of WiFi Traffic there is an adapter selector.
-
-Choose the adapter that is actually connected to the network:
-
-- If your PC uses Wi-Fi, select your Wi-Fi adapter.
-- If your PC uses a network cable, select the Ethernet adapter.
-- Ignore disconnected adapters, VPN adapters and virtual adapters unless you specifically want to inspect them.
-
-Then click:
-
-**Start capture**
-
-The status indicator should turn green and new network traffic should begin appearing in the **Live traffic** tab.
-
-### Step 5: Test that it works
-
-While capture is running:
-
-1. Open your browser.
-2. Visit a few websites.
-3. Return to WiFi Traffic.
-4. Look under **Live traffic** and **Top websites**.
-
-You should begin seeing IP addresses, protocols, ports, traffic sizes and many detected domains.
-
-Examples of domains that may appear:
-
-- `youtube.com`
-- `google.com`
-- `discord.com`
-- `tiktok.com`
-
-Some encrypted traffic may only show IP/port information. This is normal.
-
----
-
-## Method 2 — Build and install from source
-
-Use this method if you want to modify the program or build it yourself.
-
-### Requirements
-
-You need:
+Requirements:
 
 - Windows 10 or Windows 11 64-bit
 - Administrator permission
-- Npcap
 - .NET 8 SDK
-- Git, if you want to clone the repository
+- Npcap for packet-capture mode
 
-### Step 1: Install Npcap
-
-Download and install Npcap from:
-
-https://npcap.com/#download
-
-### Step 2: Install the .NET 8 SDK
-
-Download the .NET 8 SDK from:
-
-https://dotnet.microsoft.com/download/dotnet/8.0
-
-Make sure you install the **SDK**, not only the runtime.
-
-### Step 3: Download the repository
-
-Either use Git:
+Clone the repository:
 
 ```powershell
 git clone https://github.com/chingchang2000/Wifi-Traffic.git
 cd Wifi-Traffic
 ```
 
-Or click:
-
-**Code → Download ZIP**
-
-and extract the ZIP file.
-
-### Step 4: Run the automatic Windows installer
-
-Double-click:
+Then double-click:
 
 `windows-install.bat`
 
-The installer will:
-
-1. Request Administrator permission.
-2. Check whether Npcap is installed.
-3. Check whether the .NET 8 SDK is installed.
-4. Restore the required NuGet packages.
-5. Build WiFi Traffic.
-6. Publish a self-contained Windows x64 version.
-7. Create a desktop shortcut.
-8. Start WiFi Traffic automatically.
-
-The compiled application is placed here:
-
-`dist\win-x64\WifiTraffic.exe`
-
-After the first installation you can use:
-
-`start.bat`
-
-or the desktop shortcut to start WiFi Traffic again.
-
----
-
-## Manual build
-
-If you do not want to use the installer script, open PowerShell inside the repository and run:
+or build manually:
 
 ```powershell
 dotnet restore WifiTraffic.sln
@@ -240,87 +140,71 @@ dotnet build WifiTraffic.sln -c Release
 dotnet publish src/WifiTraffic.App/WifiTraffic.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o dist/win-x64
 ```
 
-Then run:
+The finished EXE is written to:
 
 `dist\win-x64\WifiTraffic.exe`
 
-## Troubleshooting
+## Router DNS troubleshooting
 
-### No adapters appear
+### DNS sensor says port 53 is already in use
 
-Install or reinstall Npcap, then restart WiFi Traffic.
+Another DNS server may already be running on the PC, for example AdGuard Home, Pi-hole in a VM/container, Acrylic DNS Proxy or another DNS service.
 
-### Capture cannot start
+Only one program can normally listen on the same IP/port 53.
 
-Make sure:
+### Other devices do not appear
 
-- Npcap is installed.
-- WiFi Traffic is running as Administrator.
-- You selected a real Wi-Fi or Ethernet adapter.
+Check that:
 
-### I do not see traffic from every device on my Wi-Fi
+- Router DNS Mode is running.
+- The router's LAN/DHCP DNS setting points to the Windows PC LAN IP.
+- The PC is powered on.
+- Windows Firewall is using a Private network profile.
+- The client received new DHCP/DNS settings.
+- The app/browser is not bypassing normal DNS using encrypted DNS or a VPN.
 
-This is expected when the Windows PC is only a normal Wi-Fi client.
+### Internet stops when WiFi Traffic is closed
 
-Modern Wi-Fi routers do not normally send every device's private traffic to every other connected device.
+If the router is configured to use the Windows PC as DNS, the PC DNS service needs to be running.
 
-To monitor the entire network, the monitoring machine must be placed in the traffic path, for example by being used as a gateway/hotspot or by receiving mirrored traffic from compatible network equipment.
+Either start WiFi Traffic again or restore the router's previous DNS setting.
 
-### Domains are sometimes missing
+### Why do I see a domain but not the exact page?
 
-This can happen with:
-
-- DNS-over-HTTPS
-- DNS-over-TLS
-- TLS ECH
-- VPN connections
-- proxies
-- applications that connect directly to IP addresses
-
-WiFi Traffic does not decrypt HTTPS traffic.
-
-### Where is the traffic history stored?
-
-The local database is stored at:
-
-`%LOCALAPPDATA%\WifiTraffic\wifi-traffic.db`
-
-You can delete the history from inside the application with **Clear history**.
-
-## GitHub build
-
-Every push to `main` runs the **Windows Build** workflow. It restores packages, builds the solution, publishes a self-contained Windows x64 executable, and uploads `WifiTraffic-win-x64` as a workflow artifact.
+HTTPS encrypts the path and page contents. DNS normally reveals a hostname/domain, not the complete URL.
 
 ## Data location
 
-Traffic history is stored locally at `%LOCALAPPDATA%\WifiTraffic\wifi-traffic.db`.
+Traffic history is stored locally at:
 
-Nothing in the application uploads captured traffic to a cloud service.
+`%LOCALAPPDATA%\WifiTraffic\wifi-traffic.db`
+
+Nothing in the application uploads captured traffic history to a cloud service.
 
 ## Tech stack
 
 - C# / .NET 8
 - WPF
-- SharpPcap 6.3.1
-- PacketDotNet 1.4.8
-- Microsoft.Data.Sqlite 8.0.30
-- Npcap on Windows
+- SharpPcap
+- PacketDotNet
+- Microsoft.Data.Sqlite
+- Npcap for packet capture
+- Built-in UDP/TCP DNS proxy for Router DNS Mode
 
 ## Privacy and authorization
 
-Use WiFi Traffic only on networks and devices you own or have explicit authorization to monitor. The software is intentionally designed around traffic metadata and domain visibility rather than private message contents, credentials or decrypted HTTPS payloads.
+Use WiFi Traffic only on networks and devices you own or are explicitly authorized to administer.
 
 ## Roadmap
 
-- Better device identification and naming
-- Per-device charts
-- Per-domain bandwidth charts
+- Device naming
+- Per-device domain views
+- Router-specific setup helpers
 - Search and filters
 - CSV/JSON export
 - Windows tray mode
-- Capture auto-start
-- Whole Network / Gateway mode via Windows Mobile Hotspot
-- Alert rules
+- Auto-start DNS sensor
 - Retention controls
+- Router flow/log integrations
 - Packaged Windows installer
 - Signed release builds

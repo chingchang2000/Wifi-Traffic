@@ -33,11 +33,11 @@
 
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                 <ComboBox x:Name="ModeCombo"
-                          Width="225"
+                          Width="245"
                           SelectionChanged="ModeCombo_SelectionChanged"
                           SelectedIndex="0">
                     <ComboBoxItem Content="This PC only"/>
-                    <ComboBoxItem Content="Whole Network / Gateway"/>
+                    <ComboBoxItem Content="Whole Network / Router DNS"/>
                 </ComboBox>
 
                 <ComboBox x:Name="AdapterCombo"
@@ -56,7 +56,7 @@
             </StackPanel>
         </Grid>
 
-        <Border x:Name="GatewayPanel"
+        <Border x:Name="RouterDnsPanel"
                 Grid.Row="1"
                 Margin="4,16,4,0"
                 Padding="16"
@@ -74,47 +74,52 @@
                 <StackPanel>
                     <TextBlock FontSize="17"
                                FontWeight="SemiBold"
-                               Text="Whole Network / Gateway Mode"/>
+                               Text="Whole Network / Router DNS Mode"/>
 
                     <TextBlock Margin="0,7,20,0"
                                Foreground="{StaticResource Muted}"
                                TextWrapping="Wrap"
-                               Text="To see other phones, consoles and PCs, connect them to this Windows PC's Mobile Hotspot. Their traffic then passes through this computer instead of going directly to the router."/>
+                               Text="Other devices stay connected to your normal router Wi-Fi. Set your router's LAN/DHCP DNS server to this PC's IP once, and WiFi Traffic will log DNS domains per device IP while forwarding requests to the internet."/>
+
+                    <TextBlock Margin="0,10,20,0" TextWrapping="Wrap">
+                        <Run FontWeight="SemiBold" Text="This PC DNS address: "/>
+                        <Run x:Name="RouterDnsIpText" Text="Detecting..."/>
+                    </TextBlock>
+
+                    <TextBlock Margin="0,4,20,0" TextWrapping="Wrap">
+                        <Run FontWeight="SemiBold" Text="Detected router: "/>
+                        <Run x:Name="RouterGatewayText" Text="Detecting..."/>
+                    </TextBlock>
 
                     <TextBlock Margin="0,10,20,0"
                                TextWrapping="Wrap">
-                        <Run FontWeight="SemiBold" Text="Setup: "/>
-                        <Run Text="1) Open Mobile Hotspot  2) Turn it on  3) Connect the other devices to that hotspot  4) Click Refresh adapters  5) Choose the adapter marked ★ WHOLE NETWORK and start capture."/>
+                        <Run FontWeight="SemiBold" Text="Router setup: "/>
+                        <Run Text="Open your router → LAN/DHCP/DNS settings → set Primary DNS to the PC address shown above → save. Devices can remain on the same Wi-Fi."/>
                     </TextBlock>
 
-                    <TextBlock x:Name="GatewayStatusText"
+                    <TextBlock x:Name="RouterDnsStatusText"
                                Margin="0,8,20,0"
                                Foreground="{StaticResource Muted}"
-                               Text="Hotspot adapter has not been checked yet."/>
+                               Text="DNS sensor is stopped."/>
                 </StackPanel>
 
-                <StackPanel Grid.Column="1"
-                            VerticalAlignment="Center">
-                    <Button Click="OpenHotspotButton_Click"
-                            Content="Open Mobile Hotspot"/>
-                    <Button Click="RefreshAdaptersButton_Click"
-                            Content="Refresh adapters"/>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <Button Click="CopyDnsIpButton_Click" Content="Copy DNS IP"/>
+                    <Button Click="OpenRouterButton_Click" Content="Open router"/>
                 </StackPanel>
             </Grid>
         </Border>
 
-        <UniformGrid Grid.Row="2"
-                     Margin="0,16,0,0"
-                     Columns="4">
+        <UniformGrid Grid.Row="2" Margin="0,16,0,0" Columns="4">
             <Border Margin="4" Padding="18" CornerRadius="12" Background="{StaticResource Panel}" BorderBrush="{StaticResource Border}" BorderThickness="1">
                 <StackPanel>
-                    <TextBlock Foreground="{StaticResource Muted}" Text="PACKETS"/>
+                    <TextBlock Foreground="{StaticResource Muted}" Text="RECORDS"/>
                     <TextBlock x:Name="PacketCountText" Margin="0,6,0,0" FontSize="24" FontWeight="SemiBold" Text="0"/>
                 </StackPanel>
             </Border>
             <Border Margin="4" Padding="18" CornerRadius="12" Background="{StaticResource Panel}" BorderBrush="{StaticResource Border}" BorderThickness="1">
                 <StackPanel>
-                    <TextBlock Foreground="{StaticResource Muted}" Text="TRAFFIC"/>
+                    <TextBlock Foreground="{StaticResource Muted}" Text="OBSERVED BYTES"/>
                     <TextBlock x:Name="TrafficBytesText" Margin="0,6,0,0" FontSize="24" FontWeight="SemiBold" Text="0 B"/>
                 </StackPanel>
             </Border>
@@ -163,16 +168,17 @@
                 <ScrollViewer Margin="20">
                     <StackPanel MaxWidth="900" HorizontalAlignment="Left">
                         <TextBlock FontSize="22" FontWeight="SemiBold" Text="What WiFi Traffic can see"/>
+
                         <TextBlock Margin="0,12,0,0" TextWrapping="Wrap" Foreground="{StaticResource Muted}"
-                                   Text="WiFi Traffic records packet metadata visible to this Windows PC. It can identify many domains from DNS queries, plain HTTP Host headers and TLS SNI. It does not decrypt HTTPS, record passwords, or save packet payloads."/>
+                                   Text="This PC mode captures packet metadata visible to this Windows PC through Npcap."/>
 
-                        <TextBlock Margin="0,20,0,0" FontSize="18" FontWeight="SemiBold" Text="This PC mode"/>
+                        <TextBlock Margin="0,20,0,0" FontSize="18" FontWeight="SemiBold" Text="Whole Network / Router DNS mode"/>
                         <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Foreground="{StaticResource Muted}"
-                                   Text="This mode normally sees only this computer's own unicast traffic plus broadcast/multicast traffic that reaches it."/>
+                                   Text="Devices stay on the normal router Wi-Fi. The router hands out this PC as DNS, so DNS queries from network devices reach WiFi Traffic and can be logged by client IP. HTTPS content is not decrypted."/>
 
-                        <TextBlock Margin="0,20,0,0" FontSize="18" FontWeight="SemiBold" Text="Whole Network / Gateway mode"/>
+                        <TextBlock Margin="0,20,0,0" FontSize="18" FontWeight="SemiBold" Text="Limits"/>
                         <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Foreground="{StaticResource Muted}"
-                                   Text="Other devices must send their traffic through this PC. The easiest Windows setup is Mobile Hotspot: connect the devices to the PC's hotspot and capture the hotspot virtual adapter marked with ★ WHOLE NETWORK."/>
+                                   Text="Router DNS mode shows domains, not full HTTPS URLs or page contents. Devices or apps using encrypted DNS, VPNs, private relay, hard-coded DNS or TLS ECH may reduce visibility. Full packet visibility for every device still requires router/gateway support or traffic mirroring."/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

@@ -11,22 +11,27 @@ public partial class MainWindow : Window
 {
     private readonly CaptureService _capture = new();
     private readonly DatabaseService _database = new();
-    private readonly GatewayModeService _gatewayMode = new();
+    private readonly DnsProxyService _dnsProxy = new();
+    private readonly NetworkSetupService _networkSetup = new();
     private readonly System.Windows.Threading.DispatcherTimer _refreshTimer;
 
     public ObservableCollection<TrafficRecord> LiveTraffic { get; } = new();
     public ObservableCollection<DomainRow> TopDomains { get; } = new();
 
-    private bool IsWholeNetworkMode => ModeCombo?.SelectedIndex == 1;
+    private bool IsRouterDnsMode => ModeCombo?.SelectedIndex == 1;
 
     public MainWindow()
     {
         InitializeComponent();
         DataContext = this;
 
-        _capture.TrafficObserved += Capture_TrafficObserved;
+        _capture.TrafficObserved += TrafficObserved;
         _capture.CaptureError += (_, message) =>
             Dispatcher.Invoke(() => StatusText.Text = $"Capture warning: {message}");
+
+        _dnsProxy.DomainObserved += TrafficObserved;
+        _dnsProxy.StatusChanged += (_, message) =>
+            Dispatcher.Invoke(() => RouterDnsStatusText.Text = message);
 
         _refreshTimer = new System.Windows.Threading.DispatcherTimer
         {
@@ -35,7 +40,11 @@ public partial class MainWindow : Window
         _refreshTimer.Tick += async (_, _) => await RefreshDashboardAsync();
 
         Loaded += MainWindow_Loaded;
-        Closed += (_, _) => _capture.Dispose();
+        Closed += (_, _) =>
+        {
+            _capture.Dispose();
+            _dnsProxy.Dispose();
+        };
     }
 
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
@@ -43,8 +52,8 @@ public partial class MainWindow : Window
         try
         {
             await _database.InitializeAsync();
-
-            LoadAdapters(preferGateway: false);
+            LoadAdapters();
+            UpdateRouterDnsInfo();
 
             foreach (var item in await _database.GetRecentAsync(250))
                 LiveTraffic.Add(item);
@@ -62,148 +71,112 @@ public partial class MainWindow : Window
         }
     }
 
-    private void LoadAdapters(bool preferGateway)
+    private void LoadAdapters()
     {
         var adapters = _capture.GetAdapters();
         AdapterCombo.ItemsSource = adapters;
 
-        if (adapters.Count == 0)
-        {
-            AdapterCombo.SelectedItem = null;
-            StatusText.Text = "No capture adapters found. Install Npcap and restart.";
-            return;
-        }
-
-        CaptureAdapter? preferred;
-
-        if (preferGateway)
-        {
-            preferred = adapters.FirstOrDefault(x => x.IsGatewayCandidate);
-            preferred ??= adapters.FirstOrDefault();
-        }
+        if (adapters.Count > 0)
+            AdapterCombo.SelectedIndex = 0;
         else
-        {
-            preferred = adapters.FirstOrDefault(x => !x.IsGatewayCandidate);
-            preferred ??= adapters.FirstOrDefault();
-        }
-
-        AdapterCombo.SelectedItem = preferred;
-
-        if (preferGateway)
-            UpdateGatewayStatus(adapters);
+            StatusText.Text = "No capture adapters found. Install Npcap for This PC mode.";
     }
 
-    private void UpdateGatewayStatus(IReadOnlyList<CaptureAdapter>? adapters = null)
+    private void UpdateRouterDnsInfo()
     {
-        adapters ??= _capture.GetAdapters();
+        var info = _networkSetup.GetRouterDnsInfo();
 
-        var marked = adapters.Count(x => x.IsGatewayCandidate);
-        var interfaces = _gatewayMode.GetGatewayInterfaceSummary();
-
-        if (marked > 0)
+        if (info is null)
         {
-            GatewayStatusText.Text =
-                $"Found {marked} likely hotspot/gateway capture adapter(s). Select the one marked ★ WHOLE NETWORK.";
+            RouterDnsIpText.Text = "Could not detect";
+            RouterGatewayText.Text = "Could not detect";
             return;
         }
 
-        if (interfaces.Count > 0)
-        {
-            GatewayStatusText.Text =
-                "Windows hotspot interface exists, but Npcap did not match it automatically. " +
-                "Try the virtual/Wi-Fi Direct adapter in the list.";
-            return;
-        }
-
-        GatewayStatusText.Text =
-            "No active Windows hotspot adapter found yet. Turn on Mobile Hotspot, connect at least one device, then click Refresh adapters.";
+        RouterDnsIpText.Text = info.LanIp;
+        RouterGatewayText.Text = $"{info.GatewayIp} ({info.InterfaceName})";
     }
 
     private void ModeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (GatewayPanel is null || SubtitleText is null || AdapterCombo is null)
+        if (RouterDnsPanel is null || AdapterCombo is null || StartButton is null)
             return;
 
-        if (IsWholeNetworkMode)
+        if (IsRouterDnsMode)
         {
-            GatewayPanel.Visibility = Visibility.Visible;
-            SubtitleText.Text = "Whole Network mode • devices connected through this PC";
-            LoadAdapters(preferGateway: true);
+            RouterDnsPanel.Visibility = Visibility.Visible;
+            AdapterCombo.IsEnabled = false;
+            SubtitleText.Text = "Whole Network mode • devices stay on the normal router Wi-Fi";
+            StartButton.Content = "Start DNS sensor";
+            UpdateRouterDnsInfo();
         }
         else
         {
-            GatewayPanel.Visibility = Visibility.Collapsed;
+            RouterDnsPanel.Visibility = Visibility.Collapsed;
+            AdapterCombo.IsEnabled = true;
             SubtitleText.Text = "This PC mode • monitors traffic visible to this computer";
-            LoadAdapters(preferGateway: false);
+            StartButton.Content = "Start capture";
         }
     }
 
-    private void OpenHotspotButton_Click(object sender, RoutedEventArgs e)
+    private async void StartButton_Click(object sender, RoutedEventArgs e)
     {
         try
         {
-            _gatewayMode.OpenMobileHotspotSettings();
-            GatewayStatusText.Text =
-                "Windows Mobile Hotspot settings opened. Turn it on, connect the other devices to the hotspot, then return here and click Refresh adapters.";
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(
-                $"Could not open Windows Mobile Hotspot settings.\n\n{ex.Message}",
-                "WiFi Traffic",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
-        }
-    }
+            if (IsRouterDnsMode)
+            {
+                var info = _networkSetup.GetRouterDnsInfo();
 
-    private void RefreshAdaptersButton_Click(object sender, RoutedEventArgs e)
-    {
-        LoadAdapters(preferGateway: IsWholeNetworkMode);
-    }
+                if (info is null)
+                {
+                    MessageBox.Show(
+                        "Could not detect this PC's LAN IP or default router. Make sure the PC is connected to your normal network.",
+                        "Router DNS Mode",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    return;
+                }
 
-    private void StartButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (AdapterCombo.SelectedItem is not CaptureAdapter adapter)
-        {
-            MessageBox.Show("Select a network adapter first.");
-            return;
-        }
+                _networkSetup.EnsureDnsFirewallRules();
+                await _dnsProxy.StartAsync();
 
-        if (IsWholeNetworkMode && !adapter.IsGatewayCandidate)
-        {
-            var choice = MessageBox.Show(
-                "This adapter is not automatically recognized as a Windows hotspot/gateway adapter.\n\n" +
-                "For other devices to appear, they must be connected through this PC. " +
-                "If you know this is the correct virtual/shared adapter, you can continue.\n\n" +
-                "Start capture on this adapter anyway?",
-                "Whole Network adapter check",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning);
+                StartButton.IsEnabled = false;
+                StopButton.IsEnabled = true;
+                ModeCombo.IsEnabled = false;
 
-            if (choice != MessageBoxResult.Yes)
-                return;
-        }
+                StatusText.Text = $"Router DNS sensor running on {info.LanIp}:53";
+                RouterDnsStatusText.Text =
+                    $"Running. Set your router's LAN/DHCP DNS server to {info.LanIp}.";
+            }
+            else
+            {
+                if (AdapterCombo.SelectedItem is not CaptureAdapter adapter)
+                {
+                    MessageBox.Show("Select a network adapter first.");
+                    return;
+                }
 
-        try
-        {
-            _capture.Start(adapter.Id);
+                _capture.Start(adapter.Id);
 
-            StartButton.IsEnabled = false;
-            StopButton.IsEnabled = true;
-            AdapterCombo.IsEnabled = false;
-            ModeCombo.IsEnabled = false;
+                StartButton.IsEnabled = false;
+                StopButton.IsEnabled = true;
+                AdapterCombo.IsEnabled = false;
+                ModeCombo.IsEnabled = false;
 
-            StatusText.Text = IsWholeNetworkMode
-                ? $"Whole Network capture running on {adapter.Description}"
-                : $"Capturing this PC on {adapter.Description}";
+                StatusText.Text = $"Capturing this PC on {adapter.Description}";
+            }
 
             StatusDot.Fill = new SolidColorBrush(Color.FromRgb(66, 211, 146));
         }
         catch (Exception ex)
         {
+            var message = IsRouterDnsMode
+                ? "DNS sensor could not start. Port 53 may already be in use by another DNS program.\n\n"
+                : "Capture could not be started. Make sure Npcap is installed and run WiFi Traffic as Administrator.\n\n";
+
             MessageBox.Show(
-                "Capture could not be started. Make sure Npcap is installed and run WiFi Traffic as Administrator.\n\n" + ex.Message,
-                "Capture error",
+                message + ex.Message,
+                "WiFi Traffic",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
         }
@@ -212,21 +185,55 @@ public partial class MainWindow : Window
     private void StopButton_Click(object sender, RoutedEventArgs e)
     {
         _capture.Stop();
+        _dnsProxy.Stop();
+
         StartButton.IsEnabled = true;
         StopButton.IsEnabled = false;
-        AdapterCombo.IsEnabled = true;
         ModeCombo.IsEnabled = true;
+        AdapterCombo.IsEnabled = !IsRouterDnsMode;
         StatusText.Text = "Stopped";
+        RouterDnsStatusText.Text = "DNS sensor is stopped.";
         StatusDot.Fill = new SolidColorBrush(Color.FromRgb(97, 112, 131));
     }
 
-    private void Capture_TrafficObserved(object? sender, TrafficRecord record)
+    private void CopyDnsIpButton_Click(object sender, RoutedEventArgs e)
+    {
+        var info = _networkSetup.GetRouterDnsInfo();
+
+        if (info is null)
+        {
+            MessageBox.Show("Could not detect this PC's LAN IP.");
+            return;
+        }
+
+        Clipboard.SetText(info.LanIp);
+        RouterDnsStatusText.Text = $"Copied DNS IP {info.LanIp} to clipboard.";
+    }
+
+    private void OpenRouterButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            _networkSetup.OpenRouterAdminPage();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Could not open the router page.\n\n{ex.Message}",
+                "WiFi Traffic",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
+
+    private void TrafficObserved(object? sender, TrafficRecord record)
     {
         _database.Enqueue(record);
 
         Dispatcher.BeginInvoke(() =>
         {
             LiveTraffic.Insert(0, record);
+
             while (LiveTraffic.Count > 500)
                 LiveTraffic.RemoveAt(LiveTraffic.Count - 1);
         });
@@ -237,6 +244,7 @@ public partial class MainWindow : Window
         try
         {
             var stats = await _database.GetStatsAsync();
+
             PacketCountText.Text = stats.PacketCount.ToString("N0");
             TrafficBytesText.Text = FormatBytes(stats.TotalBytes);
             DomainCountText.Text = stats.UniqueDomains.ToString("N0");
@@ -253,8 +261,11 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void RefreshButton_Click(object sender, RoutedEventArgs e) =>
+    private async void RefreshButton_Click(object sender, RoutedEventArgs e)
+    {
+        UpdateRouterDnsInfo();
         await RefreshDashboardAsync();
+    }
 
     private async void ClearButton_Click(object sender, RoutedEventArgs e)
     {
