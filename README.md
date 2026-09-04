@@ -36,6 +36,36 @@ WiFi Traffic can record everything that reaches the selected capture adapter. To
 2. Feed mirrored traffic to the monitoring machine from networking hardware that supports port mirroring.
 3. Use a dedicated gateway/router sensor and send metadata to this dashboard.
 
+## Whole Network / Gateway Mode
+
+If WiFi Traffic only shows websites opened by the monitoring PC, that is expected in **This PC only** mode.
+
+A normal Windows PC connected to a router does not receive all private unicast traffic from every other Wi-Fi device. To see other devices without changing the router, use the new **Whole Network / Gateway** mode:
+
+1. Open WiFi Traffic.
+2. Change the mode at the top from **This PC only** to **Whole Network / Gateway**.
+3. Click **Open Mobile Hotspot**.
+4. Turn on Windows Mobile Hotspot.
+5. Connect the phones, consoles, TVs, tablets or other PCs you want to monitor to the Windows hotspot instead of directly to the router Wi-Fi.
+6. Return to WiFi Traffic.
+7. Click **Refresh adapters**.
+8. Select the adapter marked **★ WHOLE NETWORK**.
+9. Click **Start capture**.
+
+Traffic from hotspot clients will be labeled with directions such as:
+
+- `Client → Internet`
+- `Internet → Client`
+- `Client / Local`
+
+The **Source / device IP** column lets you distinguish hotspot clients by their private IP address.
+
+### Important limitation
+
+Whole Network mode can only see devices whose traffic actually passes through the monitoring PC.
+
+Devices that remain connected directly to the original router Wi-Fi will normally remain invisible to the Windows capture machine. To monitor those without reconnecting them to the PC hotspot, the router/switch itself must support traffic mirroring, gateway logging, or another authorized network-monitoring method.
+
 ## Website visibility
 
 Most modern websites use HTTPS. WiFi Traffic does not break or decrypt HTTPS.
@@ -289,7 +319,7 @@ Use WiFi Traffic only on networks and devices you own or have explicit authoriza
 - CSV/JSON export
 - Windows tray mode
 - Capture auto-start
-- Gateway/hotspot assisted whole-network mode
+- Whole Network / Gateway mode via Windows Mobile Hotspot
 - Alert rules
 - Retention controls
 - Packaged Windows installer
