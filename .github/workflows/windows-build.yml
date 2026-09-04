@@ -1,0 +1,37 @@
+name: Windows Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore WifiTraffic.sln
+
+      - name: Build
+        run: dotnet build WifiTraffic.sln -c Release --no-restore
+
+      - name: Publish self-contained EXE
+        shell: pwsh
+        run: dotnet publish src/WifiTraffic.App/WifiTraffic.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o dist/win-x64
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: WifiTraffic-win-x64
+          path: dist/win-x64/**
+          if-no-files-found: error
