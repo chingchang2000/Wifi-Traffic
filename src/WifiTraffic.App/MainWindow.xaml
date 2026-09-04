@@ -33,15 +33,16 @@
 
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                 <ComboBox x:Name="ModeCombo"
-                          Width="245"
+                          Width="255"
                           SelectionChanged="ModeCombo_SelectionChanged"
                           SelectedIndex="0">
                     <ComboBoxItem Content="This PC only"/>
                     <ComboBoxItem Content="Whole Network / Router DNS"/>
+                    <ComboBoxItem Content="No setup / Devices"/>
                 </ComboBox>
 
                 <ComboBox x:Name="AdapterCombo"
-                          Width="390"
+                          Width="360"
                           DisplayMemberPath="DisplayName"
                           SelectedValuePath="Id"/>
 
@@ -56,59 +57,72 @@
             </StackPanel>
         </Grid>
 
-        <Border x:Name="RouterDnsPanel"
-                Grid.Row="1"
-                Margin="4,16,4,0"
-                Padding="16"
-                CornerRadius="12"
-                Background="{StaticResource Panel}"
-                BorderBrush="{StaticResource Accent}"
-                BorderThickness="1"
-                Visibility="Collapsed">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
+        <Grid Grid.Row="1">
+            <Border x:Name="RouterDnsPanel"
+                    Margin="4,16,4,0"
+                    Padding="16"
+                    CornerRadius="12"
+                    Background="{StaticResource Panel}"
+                    BorderBrush="{StaticResource Accent}"
+                    BorderThickness="1"
+                    Visibility="Collapsed">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
 
+                    <StackPanel>
+                        <TextBlock FontSize="17" FontWeight="SemiBold" Text="Whole Network / Router DNS Mode"/>
+                        <TextBlock Margin="0,7,20,0"
+                                   Foreground="{StaticResource Muted}"
+                                   TextWrapping="Wrap"
+                                   Text="Other devices stay on your normal Wi-Fi. To see their requested domains, the router must hand out this PC as DNS. This requires a one-time router setting."/>
+                        <TextBlock Margin="0,10,20,0" TextWrapping="Wrap">
+                            <Run FontWeight="SemiBold" Text="This PC DNS address: "/>
+                            <Run x:Name="RouterDnsIpText" Text="Detecting..."/>
+                        </TextBlock>
+                        <TextBlock Margin="0,4,20,0" TextWrapping="Wrap">
+                            <Run FontWeight="SemiBold" Text="Detected router: "/>
+                            <Run x:Name="RouterGatewayText" Text="Detecting..."/>
+                        </TextBlock>
+                        <TextBlock x:Name="RouterDnsStatusText"
+                                   Margin="0,8,20,0"
+                                   Foreground="{StaticResource Muted}"
+                                   Text="DNS sensor is stopped."/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <Button Click="CopyDnsIpButton_Click" Content="Copy DNS IP"/>
+                        <Button Click="OpenRouterButton_Click" Content="Open router"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <Border x:Name="NoSetupPanel"
+                    Margin="4,16,4,0"
+                    Padding="16"
+                    CornerRadius="12"
+                    Background="{StaticResource Panel}"
+                    BorderBrush="{StaticResource Accent}"
+                    BorderThickness="1"
+                    Visibility="Collapsed">
                 <StackPanel>
-                    <TextBlock FontSize="17"
-                               FontWeight="SemiBold"
-                               Text="Whole Network / Router DNS Mode"/>
-
-                    <TextBlock Margin="0,7,20,0"
+                    <TextBlock FontSize="17" FontWeight="SemiBold" Text="No setup / Device discovery"/>
+                    <TextBlock Margin="0,7,0,0"
                                Foreground="{StaticResource Muted}"
                                TextWrapping="Wrap"
-                               Text="Other devices stay connected to your normal router Wi-Fi. Set your router's LAN/DHCP DNS server to this PC's IP once, and WiFi Traffic will log DNS domains per device IP while forwarding requests to the internet."/>
-
-                    <TextBlock Margin="0,10,20,0" TextWrapping="Wrap">
-                        <Run FontWeight="SemiBold" Text="This PC DNS address: "/>
-                        <Run x:Name="RouterDnsIpText" Text="Detecting..."/>
-                    </TextBlock>
-
-                    <TextBlock Margin="0,4,20,0" TextWrapping="Wrap">
-                        <Run FontWeight="SemiBold" Text="Detected router: "/>
-                        <Run x:Name="RouterGatewayText" Text="Detecting..."/>
-                    </TextBlock>
-
-                    <TextBlock Margin="0,10,20,0"
-                               TextWrapping="Wrap">
-                        <Run FontWeight="SemiBold" Text="Router setup: "/>
-                        <Run Text="Open your router → LAN/DHCP/DNS settings → set Primary DNS to the PC address shown above → save. Devices can remain on the same Wi-Fi."/>
-                    </TextBlock>
-
-                    <TextBlock x:Name="RouterDnsStatusText"
-                               Margin="0,8,20,0"
+                               Text="No router login, no DNS changes and no reconnecting devices. WiFi Traffic scans the local LAN and lists devices it can discover by IP, MAC address and hostname where available."/>
+                    <TextBlock Margin="0,10,0,0"
+                               TextWrapping="Wrap"
+                               Text="Important: this mode can discover devices, but Windows cannot see the websites used by those devices unless their DNS/traffic is sent to the PC or the router provides monitoring data."/>
+                    <TextBlock x:Name="NoSetupStatusText"
+                               Margin="0,8,0,0"
                                Foreground="{StaticResource Muted}"
-                               Text="DNS sensor is stopped."/>
+                               Text="Ready to scan."/>
                 </StackPanel>
-
-                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                    <Button Click="CopyDnsIpButton_Click" Content="Copy DNS IP"/>
-                    <Button Click="OpenRouterButton_Click" Content="Open router"/>
-                </StackPanel>
-            </Grid>
-        </Border>
+            </Border>
+        </Grid>
 
         <UniformGrid Grid.Row="2" Margin="0,16,0,0" Columns="4">
             <Border Margin="4" Padding="18" CornerRadius="12" Background="{StaticResource Panel}" BorderBrush="{StaticResource Border}" BorderThickness="1">
@@ -152,6 +166,17 @@
                 </DataGrid>
             </TabItem>
 
+            <TabItem Header="Devices">
+                <DataGrid Margin="8" ItemsSource="{Binding Devices}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="IP address" Binding="{Binding IpAddress}" Width="180"/>
+                        <DataGridTextColumn Header="MAC address" Binding="{Binding MacAddress}" Width="190"/>
+                        <DataGridTextColumn Header="Hostname / device" Binding="{Binding HostName}" Width="*"/>
+                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="180"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
             <TabItem Header="Top websites">
                 <Grid Margin="12">
                     <DataGrid x:Name="DomainsGrid" ItemsSource="{Binding TopDomains}">
@@ -167,18 +192,16 @@
             <TabItem Header="Capture info">
                 <ScrollViewer Margin="20">
                     <StackPanel MaxWidth="900" HorizontalAlignment="Left">
-                        <TextBlock FontSize="22" FontWeight="SemiBold" Text="What WiFi Traffic can see"/>
-
-                        <TextBlock Margin="0,12,0,0" TextWrapping="Wrap" Foreground="{StaticResource Muted}"
-                                   Text="This PC mode captures packet metadata visible to this Windows PC through Npcap."/>
-
-                        <TextBlock Margin="0,20,0,0" FontSize="18" FontWeight="SemiBold" Text="Whole Network / Router DNS mode"/>
+                        <TextBlock FontSize="22" FontWeight="SemiBold" Text="Monitoring modes"/>
+                        <TextBlock Margin="0,12,0,0" FontSize="18" FontWeight="SemiBold" Text="No setup / Devices"/>
                         <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Foreground="{StaticResource Muted}"
-                                   Text="Devices stay on the normal router Wi-Fi. The router hands out this PC as DNS, so DNS queries from network devices reach WiFi Traffic and can be logged by client IP. HTTPS content is not decrypted."/>
-
-                        <TextBlock Margin="0,20,0,0" FontSize="18" FontWeight="SemiBold" Text="Limits"/>
+                                   Text="Finds devices visible on the local LAN without router login. It cannot reveal other devices' websites because their private traffic is not delivered to this PC."/>
+                        <TextBlock Margin="0,20,0,0" FontSize="18" FontWeight="SemiBold" Text="Whole Network / Router DNS"/>
                         <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Foreground="{StaticResource Muted}"
-                                   Text="Router DNS mode shows domains, not full HTTPS URLs or page contents. Devices or apps using encrypted DNS, VPNs, private relay, hard-coded DNS or TLS ECH may reduce visibility. Full packet visibility for every device still requires router/gateway support or traffic mirroring."/>
+                                   Text="Shows many requested domains per client IP, but requires the router's DHCP/DNS setting to point to this PC."/>
+                        <TextBlock Margin="0,20,0,0" FontSize="18" FontWeight="SemiBold" Text="This PC only"/>
+                        <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Foreground="{StaticResource Muted}"
+                                   Text="Captures packet metadata that reaches this Windows PC through Npcap."/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

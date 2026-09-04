@@ -13,12 +13,15 @@ public partial class MainWindow : Window
     private readonly DatabaseService _database = new();
     private readonly DnsProxyService _dnsProxy = new();
     private readonly NetworkSetupService _networkSetup = new();
+    private readonly LanDiscoveryService _lanDiscovery = new();
     private readonly System.Windows.Threading.DispatcherTimer _refreshTimer;
 
     public ObservableCollection<TrafficRecord> LiveTraffic { get; } = new();
     public ObservableCollection<DomainRow> TopDomains { get; } = new();
+    public ObservableCollection<LanDevice> Devices { get; } = new();
 
     private bool IsRouterDnsMode => ModeCombo?.SelectedIndex == 1;
+    private bool IsNoSetupMode => ModeCombo?.SelectedIndex == 2;
 
     public MainWindow()
     {
@@ -99,8 +102,12 @@ public partial class MainWindow : Window
 
     private void ModeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (RouterDnsPanel is null || AdapterCombo is null || StartButton is null)
+        if (RouterDnsPanel is null || NoSetupPanel is null || AdapterCombo is null || StartButton is null)
             return;
+
+        RouterDnsPanel.Visibility = Visibility.Collapsed;
+        NoSetupPanel.Visibility = Visibility.Collapsed;
+        StopButton.Visibility = Visibility.Visible;
 
         if (IsRouterDnsMode)
         {
@@ -110,9 +117,16 @@ public partial class MainWindow : Window
             StartButton.Content = "Start DNS sensor";
             UpdateRouterDnsInfo();
         }
+        else if (IsNoSetupMode)
+        {
+            NoSetupPanel.Visibility = Visibility.Visible;
+            AdapterCombo.IsEnabled = false;
+            SubtitleText.Text = "No setup mode • discovers devices without router login";
+            StartButton.Content = "Scan devices";
+            StopButton.Visibility = Visibility.Collapsed;
+        }
         else
         {
-            RouterDnsPanel.Visibility = Visibility.Collapsed;
             AdapterCombo.IsEnabled = true;
             SubtitleText.Text = "This PC mode • monitors traffic visible to this computer";
             StartButton.Content = "Start capture";
@@ -123,6 +137,35 @@ public partial class MainWindow : Window
     {
         try
         {
+            if (IsNoSetupMode)
+            {
+                StartButton.IsEnabled = false;
+                ModeCombo.IsEnabled = false;
+                NoSetupStatusText.Text = "Scanning local network...";
+                StatusText.Text = "Scanning devices...";
+
+                var progress = new Progress<string>(message =>
+                {
+                    NoSetupStatusText.Text = message;
+                    StatusText.Text = message;
+                });
+
+                var devices = await _lanDiscovery.ScanAsync(progress);
+
+                Devices.Clear();
+                foreach (var device in devices)
+                    Devices.Add(device);
+
+                NoSetupStatusText.Text =
+                    $"Found {Devices.Count} devices. No router login was used.";
+                StatusText.Text =
+                    $"Device scan complete — {Devices.Count} devices found";
+
+                StartButton.IsEnabled = true;
+                ModeCombo.IsEnabled = true;
+                return;
+            }
+
             if (IsRouterDnsMode)
             {
                 var info = _networkSetup.GetRouterDnsInfo();
@@ -170,9 +213,14 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            var message = IsRouterDnsMode
-                ? "DNS sensor could not start. Port 53 may already be in use by another DNS program.\n\n"
-                : "Capture could not be started. Make sure Npcap is installed and run WiFi Traffic as Administrator.\n\n";
+            StartButton.IsEnabled = true;
+            ModeCombo.IsEnabled = true;
+
+            var message = IsNoSetupMode
+                ? "Device discovery failed.\n\n"
+                : IsRouterDnsMode
+                    ? "DNS sensor could not start. Port 53 may already be in use by another DNS program.\n\n"
+                    : "Capture could not be started. Make sure Npcap is installed and run WiFi Traffic as Administrator.\n\n";
 
             MessageBox.Show(
                 message + ex.Message,
@@ -190,7 +238,7 @@ public partial class MainWindow : Window
         StartButton.IsEnabled = true;
         StopButton.IsEnabled = false;
         ModeCombo.IsEnabled = true;
-        AdapterCombo.IsEnabled = !IsRouterDnsMode;
+        AdapterCombo.IsEnabled = !IsRouterDnsMode && !IsNoSetupMode;
         StatusText.Text = "Stopped";
         RouterDnsStatusText.Text = "DNS sensor is stopped.";
         StatusDot.Fill = new SolidColorBrush(Color.FromRgb(97, 112, 131));
@@ -248,7 +296,7 @@ public partial class MainWindow : Window
             PacketCountText.Text = stats.PacketCount.ToString("N0");
             TrafficBytesText.Text = FormatBytes(stats.TotalBytes);
             DomainCountText.Text = stats.UniqueDomains.ToString("N0");
-            SourceCountText.Text = stats.UniqueSources.ToString("N0");
+            SourceCountText.Text = Math.Max(stats.UniqueSources, Devices.Count).ToString("N0");
 
             var domains = await _database.GetTopDomainsAsync(100);
             TopDomains.Clear();

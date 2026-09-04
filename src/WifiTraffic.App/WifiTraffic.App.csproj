@@ -8,7 +8,7 @@
     <AssemblyName>WifiTraffic</AssemblyName>
     <RootNamespace>WifiTraffic</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>0.3.0</Version>
+    <Version>0.4.0</Version>
     <Authors>WiFi Traffic</Authors>
     <Description>Local network traffic visibility for Windows.</Description>
   </PropertyGroup>

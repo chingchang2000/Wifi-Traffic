@@ -6,7 +6,7 @@ WiFi Traffic is a .NET 8 WPF desktop program that produces a real Windows EXE, s
 
 ## Current features
 
-- Native Windows desktop UI
+- Native Windows desktop UI\n- No setup / Devices LAN discovery
 - This-PC packet capture
 - Whole Network / Router DNS Mode
 - Devices stay connected to the normal router Wi-Fi
@@ -26,6 +26,28 @@ WiFi Traffic is a .NET 8 WPF desktop program that produces a real Windows EXE, s
 - Self-contained Windows x64 EXE
 - No HTTPS decryption
 - No password/session interception
+
+
+## No setup / Devices mode
+
+If you do not want to log in to the router or change any network settings, select **No setup / Devices**.
+
+This mode:
+
+- requires no router login
+- requires no DNS changes
+- does not make phones, TVs or consoles reconnect to the PC
+- scans the local LAN automatically
+- shows discovered IP addresses
+- shows MAC addresses where Windows can learn them
+- attempts to resolve host/device names
+- keeps a dedicated **Devices** tab in the dashboard
+
+### What it cannot do
+
+No-setup mode cannot show the websites used by other Wi-Fi devices.
+
+That is a networking limitation, not a missing permission in the app: a normal Windows client does not receive the other clients' private unicast traffic. For domain visibility, use **Whole Network / Router DNS**. For full packet visibility, the router/gateway or network hardware must provide the traffic to the monitoring PC.
 
 ## Whole Network / Router DNS Mode
 
@@ -197,7 +219,7 @@ Use WiFi Traffic only on networks and devices you own or are explicitly authoriz
 
 ## Roadmap
 
-- Device naming
+- Better device naming/vendor identification
 - Per-device domain views
 - Router-specific setup helpers
 - Search and filters
