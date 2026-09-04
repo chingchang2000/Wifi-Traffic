@@ -103,7 +103,7 @@ public sealed class DatabaseService
         {
             await using var connection = new SqliteConnection(_connectionString);
             await connection.OpenAsync();
-            await using var transaction = await connection.BeginTransactionAsync();
+            using var transaction = connection.BeginTransaction();
 
             var command = connection.CreateCommand();
             command.Transaction = transaction;
@@ -141,7 +141,7 @@ public sealed class DatabaseService
                 await command.ExecuteNonQueryAsync();
             }
 
-            await transaction.CommitAsync();
+            transaction.Commit();
         }
         finally
         {
