@@ -104,16 +104,7 @@ public partial class MainWindow : Window
 
     private void Capture_TrafficObserved(object? sender, TrafficRecord record)
     {
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await _database.InsertAsync(record);
-            }
-            catch
-            {
-            }
-        });
+        _database.Enqueue(record);
 
         Dispatcher.BeginInvoke(() =>
         {
