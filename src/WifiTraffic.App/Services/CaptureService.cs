@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.NetworkInformation;
 using PacketDotNet;
 using SharpPcap;
@@ -8,7 +9,8 @@ namespace WifiTraffic.Services;
 public sealed class CaptureService : IDisposable
 {
     private ICaptureDevice? _device;
-    private readonly HashSet<string> _localAddresses;
+    private readonly HashSet<string> _localAddresses = new(StringComparer.OrdinalIgnoreCase);
+    private readonly GatewayModeService _gatewayMode = new();
 
     public event EventHandler<TrafficRecord>? TrafficObserved;
     public event EventHandler<string>? CaptureError;
@@ -17,10 +19,7 @@ public sealed class CaptureService : IDisposable
 
     public CaptureService()
     {
-        _localAddresses = NetworkInterface.GetAllNetworkInterfaces()
-            .SelectMany(n => n.GetIPProperties().UnicastAddresses)
-            .Select(a => a.Address.ToString())
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        RefreshLocalAddresses();
     }
 
     public IReadOnlyList<CaptureAdapter> GetAdapters()
@@ -29,18 +28,24 @@ public sealed class CaptureService : IDisposable
 
         foreach (var device in CaptureDeviceList.Instance)
         {
+            var description = device.Description ?? "";
             list.Add(new CaptureAdapter(
                 device.Name,
                 device.Name,
-                device.Description ?? ""));
+                description,
+                _gatewayMode.IsLikelyGatewayCaptureAdapter(device.Name, description)));
         }
 
-        return list;
+        return list
+            .OrderByDescending(x => x.IsGatewayCandidate)
+            .ThenBy(x => x.Description)
+            .ToList();
     }
 
     public void Start(string adapterId)
     {
         Stop();
+        RefreshLocalAddresses();
 
         var device = CaptureDeviceList.Instance
             .FirstOrDefault(d => string.Equals(d.Name, adapterId, StringComparison.OrdinalIgnoreCase));
@@ -168,13 +173,55 @@ public sealed class CaptureService : IDisposable
         var destinationLocal = _localAddresses.Contains(destination);
 
         if (sourceLocal && !destinationLocal)
-            return "Outbound";
+            return "This PC → Internet";
+
         if (!sourceLocal && destinationLocal)
-            return "Inbound";
+            return "Internet → This PC";
+
         if (sourceLocal && destinationLocal)
-            return "Local";
+            return "This PC / Local";
+
+        if (IsPrivateAddress(source) && !IsPrivateAddress(destination))
+            return "Client → Internet";
+
+        if (!IsPrivateAddress(source) && IsPrivateAddress(destination))
+            return "Internet → Client";
+
+        if (IsPrivateAddress(source) && IsPrivateAddress(destination))
+            return "Client / Local";
 
         return "Observed";
+    }
+
+    private void RefreshLocalAddresses()
+    {
+        _localAddresses.Clear();
+
+        foreach (var address in NetworkInterface.GetAllNetworkInterfaces()
+                     .SelectMany(n => n.GetIPProperties().UnicastAddresses)
+                     .Select(a => a.Address.ToString()))
+        {
+            _localAddresses.Add(address);
+        }
+    }
+
+    private static bool IsPrivateAddress(string value)
+    {
+        if (!IPAddress.TryParse(value, out var address))
+            return false;
+
+        if (IPAddress.IsLoopback(address))
+            return true;
+
+        if (address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6)
+            return address.IsIPv6LinkLocal || address.IsIPv6SiteLocal;
+
+        var bytes = address.GetAddressBytes();
+
+        return bytes[0] == 10 ||
+               (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) ||
+               (bytes[0] == 192 && bytes[1] == 168) ||
+               (bytes[0] == 169 && bytes[1] == 254);
     }
 
     public void Dispose() => Stop();
