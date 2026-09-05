@@ -165,7 +165,7 @@ public sealed class LanDiscoveryService
     {
         try
         {
-            var entry = await Dns.GetHostEntryAsync(ip, token).WaitAsync(TimeSpan.FromMilliseconds(600), token);
+            var entry = await Dns.GetHostEntryAsync(ip).WaitAsync(TimeSpan.FromMilliseconds(600), token);
             return entry.HostName ?? "";
         }
         catch
