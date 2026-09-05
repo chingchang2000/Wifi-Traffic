@@ -8,9 +8,9 @@
     <AssemblyName>WifiTraffic</AssemblyName>
     <RootNamespace>WifiTraffic</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>0.4.0</Version>
+    <Version>0.5.0</Version>
     <Authors>WiFi Traffic</Authors>
-    <Description>Local network traffic visibility for Windows.</Description>
+    <Description>Professional local network visibility for Windows.</Description>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="SharpPcap" Version="6.3.1" />

@@ -30,7 +30,7 @@ public partial class MainWindow : Window
 
         _capture.TrafficObserved += TrafficObserved;
         _capture.CaptureError += (_, message) =>
-            Dispatcher.Invoke(() => StatusText.Text = $"Capture warning: {message}");
+            Dispatcher.Invoke(() => SetStatus($"Capture warning: {message}", warning: true));
 
         _dnsProxy.DomainObserved += TrafficObserved;
         _dnsProxy.StatusChanged += (_, message) =>
@@ -63,6 +63,8 @@ public partial class MainWindow : Window
 
             await RefreshDashboardAsync();
             _refreshTimer.Start();
+
+            SetStatus("Ready");
         }
         catch (Exception ex)
         {
@@ -71,6 +73,8 @@ public partial class MainWindow : Window
                 "WiFi Traffic",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
+
+            SetStatus("Startup error", warning: true);
         }
     }
 
@@ -78,11 +82,27 @@ public partial class MainWindow : Window
     {
         var adapters = _capture.GetAdapters();
         AdapterCombo.ItemsSource = adapters;
+        AdapterCountText.Text = $"{adapters.Count} FOUND";
 
         if (adapters.Count > 0)
-            AdapterCombo.SelectedIndex = 0;
+        {
+            var preferred =
+                adapters.FirstOrDefault(x =>
+                    x.Description.Contains("Wi-Fi", StringComparison.OrdinalIgnoreCase) ||
+                    x.Description.Contains("Wireless", StringComparison.OrdinalIgnoreCase))
+                ?? adapters.FirstOrDefault(x =>
+                    x.Description.Contains("Ethernet", StringComparison.OrdinalIgnoreCase))
+                ?? adapters.First();
+
+            AdapterCombo.SelectedItem = preferred;
+            AdapterCombo.ToolTip = preferred.DisplayName;
+        }
         else
-            StatusText.Text = "No capture adapters found. Install Npcap for This PC mode.";
+        {
+            AdapterCombo.SelectedItem = null;
+            AdapterCombo.ToolTip = "No adapters found";
+            SetStatus("No adapters found — install Npcap", warning: true);
+        }
     }
 
     private void UpdateRouterDnsInfo()
@@ -91,45 +111,53 @@ public partial class MainWindow : Window
 
         if (info is null)
         {
-            RouterDnsIpText.Text = "Could not detect";
-            RouterGatewayText.Text = "Could not detect";
+            RouterDnsIpText.Text = "Not detected";
+            RouterGatewayText.Text = "Not detected";
             return;
         }
 
         RouterDnsIpText.Text = info.LanIp;
-        RouterGatewayText.Text = $"{info.GatewayIp} ({info.InterfaceName})";
+        RouterGatewayText.Text = $"{info.GatewayIp} • {info.InterfaceName}";
     }
 
     private void ModeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (RouterDnsPanel is null || NoSetupPanel is null || AdapterCombo is null || StartButton is null)
+        if (RouterDnsPanel is null ||
+            NoSetupPanel is null ||
+            DefaultInfoPanel is null ||
+            AdapterField is null ||
+            StartButton is null)
             return;
 
         RouterDnsPanel.Visibility = Visibility.Collapsed;
         NoSetupPanel.Visibility = Visibility.Collapsed;
+        DefaultInfoPanel.Visibility = Visibility.Collapsed;
+        AdapterField.Visibility = Visibility.Collapsed;
         StopButton.Visibility = Visibility.Visible;
 
         if (IsRouterDnsMode)
         {
             RouterDnsPanel.Visibility = Visibility.Visible;
-            AdapterCombo.IsEnabled = false;
-            SubtitleText.Text = "Whole Network mode • devices stay on the normal router Wi-Fi";
+            SubtitleText.Text = "Whole Network • domain visibility through Router DNS";
             StartButton.Content = "Start DNS sensor";
             UpdateRouterDnsInfo();
         }
         else if (IsNoSetupMode)
         {
             NoSetupPanel.Visibility = Visibility.Visible;
-            AdapterCombo.IsEnabled = false;
-            SubtitleText.Text = "No setup mode • discovers devices without router login";
+            SubtitleText.Text = "Zero setup • discover devices on your LAN";
             StartButton.Content = "Scan devices";
             StopButton.Visibility = Visibility.Collapsed;
         }
         else
         {
-            AdapterCombo.IsEnabled = true;
-            SubtitleText.Text = "This PC mode • monitors traffic visible to this computer";
+            DefaultInfoPanel.Visibility = Visibility.Visible;
+            AdapterField.Visibility = Visibility.Visible;
+            SubtitleText.Text = "This PC mode • live network visibility";
             StartButton.Content = "Start capture";
+
+            if (AdapterCombo.Items.Count == 0)
+                LoadAdapters();
         }
     }
 
@@ -142,12 +170,12 @@ public partial class MainWindow : Window
                 StartButton.IsEnabled = false;
                 ModeCombo.IsEnabled = false;
                 NoSetupStatusText.Text = "Scanning local network...";
-                StatusText.Text = "Scanning devices...";
+                SetStatus("Scanning devices...");
 
                 var progress = new Progress<string>(message =>
                 {
                     NoSetupStatusText.Text = message;
-                    StatusText.Text = message;
+                    SetStatus(message);
                 });
 
                 var devices = await _lanDiscovery.ScanAsync(progress);
@@ -156,13 +184,12 @@ public partial class MainWindow : Window
                 foreach (var device in devices)
                     Devices.Add(device);
 
-                NoSetupStatusText.Text =
-                    $"Found {Devices.Count} devices. No router login was used.";
-                StatusText.Text =
-                    $"Device scan complete — {Devices.Count} devices found";
+                NoSetupStatusText.Text = $"Found {Devices.Count} devices • no router login used";
+                SetStatus($"Scan complete • {Devices.Count} devices");
 
                 StartButton.IsEnabled = true;
                 ModeCombo.IsEnabled = true;
+                await RefreshDashboardAsync();
                 return;
             }
 
@@ -187,15 +214,18 @@ public partial class MainWindow : Window
                 StopButton.IsEnabled = true;
                 ModeCombo.IsEnabled = false;
 
-                StatusText.Text = $"Router DNS sensor running on {info.LanIp}:53";
-                RouterDnsStatusText.Text =
-                    $"Running. Set your router's LAN/DHCP DNS server to {info.LanIp}.";
+                SetStatus($"DNS sensor • {info.LanIp}:53", active: true);
+                RouterDnsStatusText.Text = $"Running • set router LAN/DHCP DNS to {info.LanIp}";
             }
             else
             {
                 if (AdapterCombo.SelectedItem is not CaptureAdapter adapter)
                 {
-                    MessageBox.Show("Select a network adapter first.");
+                    MessageBox.Show(
+                        "Choose a network adapter first.",
+                        "WiFi Traffic",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
                     return;
                 }
 
@@ -206,15 +236,14 @@ public partial class MainWindow : Window
                 AdapterCombo.IsEnabled = false;
                 ModeCombo.IsEnabled = false;
 
-                StatusText.Text = $"Capturing this PC on {adapter.Description}";
+                SetStatus($"Live • {ShortAdapterName(adapter)}", active: true);
             }
-
-            StatusDot.Fill = new SolidColorBrush(Color.FromRgb(66, 211, 146));
         }
         catch (Exception ex)
         {
             StartButton.IsEnabled = true;
             ModeCombo.IsEnabled = true;
+            AdapterCombo.IsEnabled = true;
 
             var message = IsNoSetupMode
                 ? "Device discovery failed.\n\n"
@@ -227,6 +256,8 @@ public partial class MainWindow : Window
                 "WiFi Traffic",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
+
+            SetStatus("Action failed", warning: true);
         }
     }
 
@@ -238,10 +269,10 @@ public partial class MainWindow : Window
         StartButton.IsEnabled = true;
         StopButton.IsEnabled = false;
         ModeCombo.IsEnabled = true;
-        AdapterCombo.IsEnabled = !IsRouterDnsMode && !IsNoSetupMode;
-        StatusText.Text = "Stopped";
+        AdapterCombo.IsEnabled = true;
         RouterDnsStatusText.Text = "DNS sensor is stopped.";
-        StatusDot.Fill = new SolidColorBrush(Color.FromRgb(97, 112, 131));
+
+        SetStatus("Ready");
     }
 
     private void CopyDnsIpButton_Click(object sender, RoutedEventArgs e)
@@ -255,7 +286,7 @@ public partial class MainWindow : Window
         }
 
         Clipboard.SetText(info.LanIp);
-        RouterDnsStatusText.Text = $"Copied DNS IP {info.LanIp} to clipboard.";
+        RouterDnsStatusText.Text = $"Copied {info.LanIp} to clipboard";
     }
 
     private void OpenRouterButton_Click(object sender, RoutedEventArgs e)
@@ -311,8 +342,10 @@ public partial class MainWindow : Window
 
     private async void RefreshButton_Click(object sender, RoutedEventArgs e)
     {
+        LoadAdapters();
         UpdateRouterDnsInfo();
         await RefreshDashboardAsync();
+        SetStatus("Dashboard refreshed");
     }
 
     private async void ClearButton_Click(object sender, RoutedEventArgs e)
@@ -328,6 +361,30 @@ public partial class MainWindow : Window
         LiveTraffic.Clear();
         TopDomains.Clear();
         await RefreshDashboardAsync();
+        SetStatus("History cleared");
+    }
+
+    private void SetStatus(string message, bool active = false, bool warning = false)
+    {
+        StatusText.Text = message;
+
+        StatusDot.Fill = warning
+            ? new SolidColorBrush(Color.FromRgb(255, 189, 90))
+            : active
+                ? new SolidColorBrush(Color.FromRgb(56, 217, 150))
+                : new SolidColorBrush(Color.FromRgb(97, 112, 131));
+    }
+
+    private static string ShortAdapterName(CaptureAdapter adapter)
+    {
+        if (!string.IsNullOrWhiteSpace(adapter.Description))
+            return adapter.Description.Length <= 34
+                ? adapter.Description
+                : adapter.Description[..31] + "...";
+
+        return adapter.Name.Length <= 34
+            ? adapter.Name
+            : adapter.Name[..31] + "...";
     }
 
     private static string FormatBytes(long bytes)
